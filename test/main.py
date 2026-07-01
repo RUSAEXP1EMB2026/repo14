@@ -3,12 +3,12 @@
 
 import time
 
-from remo import get_sensor_data
-from presence import check_presence
-from aircon import cool_on
-from weather import get_weather
-from exist import check_plant_mode
-from audio import speak
+from test.remo import get_sensor_data
+from test.presence import check_presence
+from test.aircon import cool_on
+from test.weather import get_weather
+from test.exist import check_plant_mode
+from test.audio import speak
 
 # 前回の天気を記録
 last_weather = ""

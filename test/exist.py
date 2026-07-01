@@ -4,7 +4,7 @@ import csv
 import os
 from datetime import datetime, timezone
 
-from remo import get_sensor_data
+from test.remo import get_sensor_data
 
 CSV_FILE_PATH = "plant_mode_log.csv"
 
