@@ -1,10 +1,10 @@
-#exist.py
+# exist.py
 
 import csv
 import os
 from datetime import datetime, timezone
 
-from test.remo import get_sensor_data
+from remo import get_sensor_data
 
 CSV_FILE_PATH = "plant_mode_log.csv"
 
@@ -34,6 +34,7 @@ def check_plant_mode():
         # 植物モード判定
         if hours >= 3:
 
+            plant_mode = True
             mode = "植物育成モード"
 
             if temperature < 15:
@@ -47,6 +48,7 @@ def check_plant_mode():
 
         else:
 
+            plant_mode = False
             mode = "通常モード"
             action = "なし"
 
@@ -91,13 +93,16 @@ def check_plant_mode():
         print(f"温度: {temperature}℃")
         print(f"湿度: {humidity}%")
         print(f"人感: {motion}")
-        print(f"最終検知から: {round(hours,2)}時間")
+        print(f"最終検知から: {round(hours, 2)}時間")
         print(f"モード: {mode}")
         print(f"動作: {action}")
         print("========================")
 
+        return plant_mode
+
     except Exception as e:
         print("エラー:", e)
+        return False
 
 
 if __name__ == "__main__":

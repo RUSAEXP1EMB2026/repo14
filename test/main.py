@@ -1,14 +1,14 @@
-#main.py
 # main.py
 
 import time
 
-from test.remo import get_sensor_data
-from test.presence import check_presence
-from test.aircon import cool_on
-from test.weather import get_weather
-from test.exist import check_plant_mode
-from test.audio import speak
+from remo import get_sensor_data
+from presence import check_presence
+from aircon import cool_on
+from weather import get_weather
+from exist import check_plant_mode
+from audio import speak
+from log import save_log
 
 # 前回の天気を記録
 last_weather = ""
@@ -17,22 +17,31 @@ while True:
 
     try:
 
+        # -------------------------
+        # センサ・天気取得
+        # -------------------------
         sensor = get_sensor_data()
         weather = get_weather()
 
         temp = sensor["temp"]
+        humidity = sensor["humidity"]
         motion = sensor["motion"]
 
         current_weather = weather["weather"]
 
+        print("\n===== システム実行 =====")
         print(f"室温: {temp}℃")
-        print(f"湿度: {sensor['humidity']}%")
+        print(f"湿度: {humidity}%")
         print(f"天気: {weather['description']}")
 
         # -------------------------
         # 天気アナウンス
         # -------------------------
-        if current_weather != last_weather:
+        global_weather_changed = (
+            current_weather != last_weather
+        )
+
+        if global_weather_changed:
 
             if current_weather == "Rain":
 
@@ -69,22 +78,39 @@ while True:
         # -------------------------
         if check_presence(motion):
 
+            presence = "在室"
             print("在室中")
 
         else:
 
+            presence = "不在"
             print("不在")
 
         # -------------------------
         # 植物育成モード判定
         # -------------------------
-        check_plant_mode()
+        plant_mode = check_plant_mode()
 
-        print("===================")
+        if plant_mode:
+
+            print("植物育成ライトON")
+
+        # -------------------------
+        # ログ保存
+        # -------------------------
+        save_log(
+            temp=temp,
+            humidity=humidity,
+            weather=weather["description"],
+            presence=presence,
+            plant_mode=plant_mode
+        )
+
+        print("========================")
 
     except Exception as e:
 
         print("エラー:", e)
 
-    # 5分ごとに実行
+    # 5分ごと
     time.sleep(300)
