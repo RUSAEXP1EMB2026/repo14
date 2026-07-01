@@ -1,0 +1,36 @@
+function saveWeatherData() {
+  // --- 【設定エリア】 ---
+  const API_KEY = "59d77b765989098e5b5b82ab6242f941"; 
+  const CITY = "Osaka"; //都市
+  const SHEET_NAME = "天気ログ";
+  // --------------------
+
+  const url = `https://api.openweathermap.org/data/2.5/weather?q=${CITY}&appid=${API_KEY}&units=metric&lang=ja`;
+  
+  try {
+    // APIを叩いてデータを取得
+    const response = UrlFetchApp.fetch(url);
+    const data = JSON.parse(response.getContentText());
+    
+    // スプレッドシートを取得
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    if (!sheet) {
+      Logger.log(`シート「${SHEET_NAME}」が見つかりません。`);
+      return;
+    }
+    
+    // 取得したいデータを整理
+    const now = new Date(); // 現在日時
+    const cityName = data.name; // 都市名
+    const weatherDesc = data.weather[0].description; // 天気（日本語）
+    const temp = data.main.temp; // 気温（℃）
+    const humidity = data.main.humidity; // 湿度（%）
+    
+    // シートの最終行にデータを追加
+    sheet.appendRow([now, cityName, weatherDesc, temp, humidity]);
+    Logger.log("天気を記録しました！");
+
+  } catch(e) {
+    Logger.log("エラーが発生しました: " + e.toString());
+  }
+}
