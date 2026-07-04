@@ -98,3 +98,6 @@ https://xxxx.ngrok-free.app/callback
 - ngrokを再起動するとURLが変わることがあります。
 - Googleスプレッドシートは、`service_account.json` 内の `client_email` に編集者として共有してください。
 - LINE Official Account Managerでは、Webhookをオン、応答メッセージをオフにします。
+
+使用しているスプレッドシートのリンクは以下になります。
+https://docs.google.com/spreadsheets/d/1YA5_eNiOeVL7PNGDX3NNqP7eb9whQGqhdd3NHhZjMQ4/edit?usp=sharing
