@@ -41,6 +41,7 @@ def save_sensor_log(sensor_data):
         sensor_data.get("humidity"),
         sensor_data.get("illuminance"),
         sensor_data.get("motion"),
+        sensor_data.get("motion_time"),
     ])
 
 
@@ -49,6 +50,7 @@ def save_weather_log(weather_data):
     sheet.append_row([
         _now(),
         weather_data.get("weather"),
+        weather_data.get("description"),
         weather_data.get("outside_temp"),
         weather_data.get("rain_probability"),
     ])
@@ -58,9 +60,23 @@ def save_control_log(target, action, result=""):
     sheet = _worksheet("ControlLog")
     reason = action.get("reason", "") if isinstance(action, dict) else ""
     value = action.get("value", action) if isinstance(action, dict) else action
-    sheet.append_row([_now(), target, value, reason, result])
+    sheet.append_row([_now(), target, value, reason, str(result)])
 
 
 def get_pending_commands():
-    rows = _worksheet("CommandQueue").get_all_records()
-    return [row for row in rows if row.get("status") == "pending"]
+    sheet = _worksheet("CommandQueue")
+    rows = sheet.get_all_records()
+    commands = []
+
+    for index, row in enumerate(rows, start=2):
+        status = str(row.get("status", "")).upper()
+        if status == "PENDING":
+            row["_row_number"] = index
+            commands.append(row)
+
+    return commands
+
+
+def mark_command_done(row_number):
+    sheet = _worksheet("CommandQueue")
+    sheet.update_cell(row_number, 5, "DONE")

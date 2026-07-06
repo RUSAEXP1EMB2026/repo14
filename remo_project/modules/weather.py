@@ -7,6 +7,7 @@ def get_weather():
     if not OPENWEATHERMAP_API_KEY:
         return {
             "weather": "unknown",
+            "description": "unknown",
             "outside_temp": None,
             "rain_probability": None,
         }
@@ -26,6 +27,7 @@ def get_weather():
 
     return {
         "weather": data["weather"][0]["main"],
+        "description": data["weather"][0]["description"],
         "outside_temp": data["main"]["temp"],
         "rain_probability": None,
     }
