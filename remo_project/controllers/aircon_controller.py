@@ -5,7 +5,7 @@ RAINY_WEATHER = {"Rain", "Drizzle", "Thunderstorm", "Snow"}
 CLOUDY_WEATHER = {"Clouds", "Mist", "Fog", "Haze"}
 
 
-def judge(settings, sensor_data, weather_data):
+def judge(settings, sensor_data, weather_data, presence=True):
     temperature = _to_float(sensor_data.get("temperature"))
     if temperature is None:
         return None
@@ -13,6 +13,13 @@ def judge(settings, sensor_data, weather_data):
     comfort_min = _to_float(settings.get("comfort_temp_min"), 20)
     comfort_max = _to_float(settings.get("comfort_temp_max"), 26)
     humidity_max = _to_float(settings.get("comfort_humidity_max"), 65)
+
+    if presence is False:
+        return _off_action(
+            "room is vacant",
+            sensor_data,
+            weather_data,
+        )
 
     if is_within_minutes(settings.get("wake_time"), 30):
         return _rhythm_action(
@@ -66,7 +73,11 @@ def judge(settings, sensor_data, weather_data):
             weather_data,
         )
 
-    return None
+    return _off_action(
+        "room temperature and humidity are comfortable",
+        sensor_data,
+        weather_data,
+    )
 
 
 def _rhythm_action(
@@ -153,6 +164,21 @@ def _heating_action(value, reason, sensor_data, weather_data, sleep=False):
         sensor_data=sensor_data,
         weather_data=weather_data,
     )
+
+
+def _off_action(reason, sensor_data, weather_data):
+    weather = weather_data.get("weather")
+    outside_temp = _to_float(weather_data.get("outside_temp"))
+    humidity = _to_float(sensor_data.get("humidity"))
+
+    return {
+        "value": "off",
+        "reason": _reason_with_weather(reason, weather, outside_temp, humidity),
+        "button": "power-off",
+        "weather": weather,
+        "outside_temp": outside_temp,
+        "humidity": humidity,
+    }
 
 
 def _cooling_temperature(sensor_data, weather_data, sleep=False):
