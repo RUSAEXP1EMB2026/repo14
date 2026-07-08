@@ -1,41 +1,32 @@
 import os
-import pygame
 import random
+from pathlib import Path
 
-# 【ここを修正】現在のファイルの場所を基準に、一つ上の階層の 'bgm' を指定する
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BGM_BASE_DIR = os.path.join(BASE_DIR, "bgm")
 
-# 用途とフォルダ名のマッピング
+BASE_DIR = Path(__file__).resolve().parent.parent
+BGM_BASE_DIR = BASE_DIR / "bgm"
 BGM_FOLDERS = {
-
-
     "clear": "clear",
     "rain": "rain",
     "cloudy": "cloudy",
-    "wake": "wake"
+    "wake": "wake",
 }
-# ...以下省略...
-# 現在再生中のカテゴリを記憶しておく変数
+
 _current_category = None
 
-def get_random_bgm(category):
-    """指定されたフォルダからランダムに1曲選ぶ"""
-    folder_path = os.path.join(BGM_BASE_DIR, BGM_FOLDERS.get(category))
-    if not os.path.exists(folder_path):
-        return None
-    
-    files = [f for f in os.listdir(folder_path) if f.endswith(".mp3")]
-    return os.path.join(folder_path, random.choice(files)) if files else None
+
+def is_enabled(settings):
+    flag = str(settings.get("bgm_flag", "ON")).strip().upper()
+    return flag in ("ON", "TRUE", "1", "YES")
+
 
 def judge(settings, sensor_data, weather_data, aircon_action):
-    """起床および天気による判定"""
-    
-    # 1. 起床時判定: 最優先でwakeカテゴリを返す
+    if not is_enabled(settings):
+        return None
+
     if aircon_action and aircon_action.get("value") == "wake_preheat":
         return "wake"
 
-    # 2. 在室中かつ起床時以外の天気判定
     weather = weather_data.get("weather")
     if weather == "Clear":
         return "clear"
@@ -45,31 +36,94 @@ def judge(settings, sensor_data, weather_data, aircon_action):
         return "cloudy"
 
     return None
+
+
 def play(category):
     global _current_category
 
-    # 同じなら何もしない
+    if category not in BGM_FOLDERS:
+        return {
+            "status": "skipped",
+            "message": f"Unknown BGM category: {category}",
+            "category": category,
+        }
+
+    pygame = _pygame()
+    if not pygame.mixer.get_init():
+        pygame.mixer.init()
+
     if _current_category == category and pygame.mixer.music.get_busy():
-        return
+        return {
+            "status": "already_playing",
+            "category": category,
+        }
 
     bgm_file = get_random_bgm(category)
     if not bgm_file:
-        return
+        return {
+            "status": "skipped",
+            "message": f"BGM file was not found for category: {category}",
+            "category": category,
+            "folder": str(BGM_BASE_DIR / BGM_FOLDERS[category]),
+        }
 
     try:
-        if not pygame.mixer.get_init():
-            pygame.mixer.init()
-
-        # ここで確実に新しい曲をロードする
-        pygame.mixer.music.stop() # 一旦止めるのがコツ
-        pygame.mixer.music.load(bgm_file)
-        pygame.mixer.music.play(-1) 
+        pygame.mixer.music.stop()
+        pygame.mixer.music.load(str(bgm_file))
+        pygame.mixer.music.play(-1)
         _current_category = category
-    except Exception:
-        pass
+        return {
+            "status": "ok",
+            "category": category,
+            "file": str(bgm_file),
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": str(exc),
+            "category": category,
+            "file": str(bgm_file),
+        }
+
 
 def stop():
     global _current_category
+
+    pygame = _pygame()
     if pygame.mixer.get_init() and pygame.mixer.music.get_busy():
         pygame.mixer.music.stop()
-        _current_category = None  
+        stopped_category = _current_category
+        _current_category = None
+        return {
+            "status": "stopped",
+            "category": stopped_category,
+        }
+
+    _current_category = None
+    return {
+        "status": "idle",
+    }
+
+
+def get_random_bgm(category):
+    folder_name = BGM_FOLDERS.get(category)
+    if not folder_name:
+        return None
+
+    folder_path = BGM_BASE_DIR / folder_name
+    if not folder_path.exists():
+        return None
+
+    files = [
+        path
+        for path in folder_path.iterdir()
+        if path.is_file() and path.suffix.lower() == ".mp3"
+    ]
+    return random.choice(files) if files else None
+
+
+def _pygame():
+    os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+    import pygame
+
+    return pygame
