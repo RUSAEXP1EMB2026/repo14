@@ -188,3 +188,5 @@ comfort_humidity_max,100,
 comfort_temp_min = 0
 comfort_temp_max = 40
 ```
+使用しているスプレッドシートのリンクは以下です
+https://docs.google.com/spreadsheets/d/1YA5_eNiOeVL7PNGDX3NNqP7eb9whQGqhdd3NHhZjMQ4/edit?usp=sharing
