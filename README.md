@@ -184,6 +184,12 @@ comfort_humidity_max,100,
 
 エアコン操作テスト後は、`comfort_temp_max` を安全側に戻してください。
 
+1. remo_project/.env を作成
+2. remo_project/remo_line_bot/.env を作成
+3. service account json を remo_line_bot に配置
+4. /debug/config で true 確認
+5. main.py の接続確認
+
 ```text
 comfort_temp_min = 0
 comfort_temp_max = 40
