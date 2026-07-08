@@ -1,8 +1,14 @@
 import time
-import pygame
 
 from config import LOOP_INTERVAL_SECONDS
-from controllers import aircon_controller, audio_controller, light_controller, plant_mode_controller, presence_controller, bgm_controller
+from controllers import (
+    aircon_controller,
+    audio_controller,
+    bgm_controller,
+    light_controller,
+    plant_mode_controller,
+    presence_controller,
+)
 from modules import nature_remo, spreadsheet, weather
 from services import command_handler
 
@@ -42,22 +48,41 @@ def run_once():
     if light_action and not plant_mode_action:
         result = nature_remo.control_light(light_action)
         spreadsheet.save_control_log("light", light_action, result)
-    
-    # BGMの処理
-    if presence:
-        category = bgm_controller.judge(settings, sensor_data, weather_data, aircon_action)
-        if category: 
-            bgm_controller.play(category)
-    else:
-        if pygame.mixer.get_init() and pygame.mixer.music.get_busy():
-            pygame.mixer.music.stop()
-            bgm_controller.stop()
 
+    _handle_bgm(settings, sensor_data, weather_data, presence, aircon_action)
 
     audio_action = audio_controller.judge(settings, sensor_data, weather_data, executed_aircon_action)
     if audio_action:
         result = audio_controller.play(audio_action)
         spreadsheet.save_control_log("audio", audio_action, result)
+
+
+def _handle_bgm(settings, sensor_data, weather_data, presence, aircon_action):
+    if presence and bgm_controller.is_enabled(settings):
+        category = bgm_controller.judge(settings, sensor_data, weather_data, aircon_action)
+        if category:
+            result = bgm_controller.play(category)
+            if result.get("status") != "already_playing":
+                spreadsheet.save_control_log(
+                    "bgm",
+                    {"value": category, "reason": "bgm category selected"},
+                    result,
+                )
+            return
+
+        result = bgm_controller.stop()
+        if result.get("status") == "stopped":
+            spreadsheet.save_control_log(
+                "bgm",
+                {"value": "stop", "reason": "bgm category was not selected"},
+                result,
+            )
+        return
+
+    result = bgm_controller.stop()
+    if result.get("status") == "stopped":
+        reason = "room is vacant" if not presence else "bgm flag is off"
+        spreadsheet.save_control_log("bgm", {"value": "stop", "reason": reason}, result)
 
 
 def main():
@@ -67,6 +92,7 @@ def main():
         except Exception as exc:
             spreadsheet.save_control_log("system", "error", str(exc))
         time.sleep(LOOP_INTERVAL_SECONDS)
+
 
 def _is_duplicate_control(target, action):
     return _LAST_CONTROL_SIGNATURES.get(target) == _control_signature(action)
