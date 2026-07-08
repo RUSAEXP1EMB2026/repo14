@@ -1,13 +1,19 @@
 ﻿import requests
 
+import time
+
 from config import (
     NATURE_REMO_AIRCON_ID,
     NATURE_REMO_LIGHT_CONTROL_METHOD,
     NATURE_REMO_LIGHT_DAYLIGHT_BUTTON,
     NATURE_REMO_LIGHT_DAYLIGHT_SIGNAL_ID,
+    NATURE_REMO_LIGHT_BRIGHT_DOWN_BUTTON,
+    NATURE_REMO_LIGHT_BRIGHT_UP_BUTTON,
     NATURE_REMO_LIGHT_ID,
+    NATURE_REMO_LIGHT_NIGHT_BUTTON,
     NATURE_REMO_LIGHT_OFF_BUTTON,
     NATURE_REMO_LIGHT_OFF_SIGNAL_ID,
+    NATURE_REMO_LIGHT_ON_BUTTON,
     NATURE_REMO_LIGHT_PLANT_BUTTON,
     NATURE_REMO_LIGHT_PLANT_SIGNAL_ID,
     NATURE_REMO_LIGHT_WARM_BUTTON,
@@ -17,13 +23,24 @@ from config import (
 
 
 BASE_URL = "https://api.nature.global/1"
+LIGHT_BUTTON_SEQUENCE_DELAY_SECONDS = 0.5
 
 
 LIGHT_BUTTONS = {
+    "on": NATURE_REMO_LIGHT_ON_BUTTON,
+    "full_light": NATURE_REMO_LIGHT_PLANT_BUTTON,
+    "night": NATURE_REMO_LIGHT_NIGHT_BUTTON,
     "daylight": NATURE_REMO_LIGHT_DAYLIGHT_BUTTON,
     "warm_light": NATURE_REMO_LIGHT_WARM_BUTTON,
     "plant_mode": NATURE_REMO_LIGHT_PLANT_BUTTON,
+    "bright_up": NATURE_REMO_LIGHT_BRIGHT_UP_BUTTON,
+    "bright_down": NATURE_REMO_LIGHT_BRIGHT_DOWN_BUTTON,
     "off": NATURE_REMO_LIGHT_OFF_BUTTON,
+}
+
+LIGHT_BUTTON_SEQUENCES = {
+    "daylight": [NATURE_REMO_LIGHT_PLANT_BUTTON, NATURE_REMO_LIGHT_DAYLIGHT_BUTTON],
+    "warm_light": [NATURE_REMO_LIGHT_PLANT_BUTTON, NATURE_REMO_LIGHT_WARM_BUTTON],
 }
 
 LIGHT_SIGNAL_IDS = {
@@ -151,21 +168,28 @@ def _control_light_by_button(value, action):
             "action": action,
         }
 
-    button = LIGHT_BUTTONS.get(value)
-    if not button:
+    buttons = LIGHT_BUTTON_SEQUENCES.get(value) or [LIGHT_BUTTONS.get(value)]
+    if not all(buttons):
         return {
             "status": "skipped",
             "message": f"Light button is missing for {value}.",
             "action": action,
         }
 
-    result = _post(f"/appliances/{NATURE_REMO_LIGHT_ID}/light", {"button": button})
+    results = []
+    for index, button in enumerate(buttons):
+        if index > 0:
+            time.sleep(LIGHT_BUTTON_SEQUENCE_DELAY_SECONDS)
+        results.append(_post(f"/appliances/{NATURE_REMO_LIGHT_ID}/light", {"button": button}))
+
     return {
         "status": "ok",
         "method": "button",
-        "button": button,
+        "button": buttons[-1],
+        "buttons": buttons,
         "action": action,
-        "result": result,
+        "result": results[-1],
+        "results": results,
     }
 
 
