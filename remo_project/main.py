@@ -1,7 +1,8 @@
 import time
+import pygame
 
 from config import LOOP_INTERVAL_SECONDS
-from controllers import aircon_controller, audio_controller, light_controller, plant_mode_controller, presence_controller
+from controllers import aircon_controller, audio_controller, light_controller, plant_mode_controller, presence_controller, bgm_controller
 from modules import nature_remo, spreadsheet, weather
 from services import command_handler
 
@@ -33,6 +34,17 @@ def run_once():
     if light_action and not plant_mode_action:
         result = nature_remo.control_light(light_action)
         spreadsheet.save_control_log("light", light_action, result)
+    
+    # BGMの処理
+    if presence:
+        category = bgm_controller.judge(settings, sensor_data, weather_data, aircon_action)
+        if category: 
+            bgm_controller.play(category)
+    else:
+        if pygame.mixer.get_init() and pygame.mixer.music.get_busy():
+            pygame.mixer.music.stop()
+            bgm_controller.stop()
+
 
     audio_action = audio_controller.judge(settings, sensor_data, weather_data, aircon_action)
     if audio_action:
