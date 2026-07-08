@@ -1,9 +1,37 @@
-import requests
+﻿import requests
 
-from config import NATURE_REMO_AIRCON_ID, NATURE_REMO_LIGHT_ID, NATURE_REMO_TOKEN
+from config import (
+    NATURE_REMO_AIRCON_ID,
+    NATURE_REMO_LIGHT_CONTROL_METHOD,
+    NATURE_REMO_LIGHT_DAYLIGHT_BUTTON,
+    NATURE_REMO_LIGHT_DAYLIGHT_SIGNAL_ID,
+    NATURE_REMO_LIGHT_ID,
+    NATURE_REMO_LIGHT_OFF_BUTTON,
+    NATURE_REMO_LIGHT_OFF_SIGNAL_ID,
+    NATURE_REMO_LIGHT_PLANT_BUTTON,
+    NATURE_REMO_LIGHT_PLANT_SIGNAL_ID,
+    NATURE_REMO_LIGHT_WARM_BUTTON,
+    NATURE_REMO_LIGHT_WARM_SIGNAL_ID,
+    NATURE_REMO_TOKEN,
+)
 
 
 BASE_URL = "https://api.nature.global/1"
+
+
+LIGHT_BUTTONS = {
+    "daylight": NATURE_REMO_LIGHT_DAYLIGHT_BUTTON,
+    "warm_light": NATURE_REMO_LIGHT_WARM_BUTTON,
+    "plant_mode": NATURE_REMO_LIGHT_PLANT_BUTTON,
+    "off": NATURE_REMO_LIGHT_OFF_BUTTON,
+}
+
+LIGHT_SIGNAL_IDS = {
+    "daylight": NATURE_REMO_LIGHT_DAYLIGHT_SIGNAL_ID,
+    "warm_light": NATURE_REMO_LIGHT_WARM_SIGNAL_ID,
+    "plant_mode": NATURE_REMO_LIGHT_PLANT_SIGNAL_ID,
+    "off": NATURE_REMO_LIGHT_OFF_SIGNAL_ID,
+}
 
 
 def _headers():
@@ -57,7 +85,7 @@ def control_aircon(action):
             "action": action,
         }
 
-    value = action.get("value") if isinstance(action, dict) else action
+    value = _action_value(action)
     data = _aircon_payload(value)
     result = _post(f"/appliances/{NATURE_REMO_AIRCON_ID}/aircon_settings", data)
     return {"status": "ok", "action": action, "result": result}
@@ -93,6 +121,29 @@ def _aircon_payload(value):
 
 
 def control_light(action):
+    value = _action_value(action)
+    method = NATURE_REMO_LIGHT_CONTROL_METHOD
+
+    if method == "button":
+        return _control_light_by_button(value, action)
+
+    if method == "signal":
+        return _control_light_by_signal(value, action)
+
+    if method == "auto":
+        button_result = _control_light_by_button(value, action)
+        if button_result.get("status") != "skipped":
+            return button_result
+        return _control_light_by_signal(value, action)
+
+    return {
+        "status": "skipped",
+        "message": f"Unknown light control method: {method}",
+        "action": action,
+    }
+
+
+def _control_light_by_button(value, action):
     if not NATURE_REMO_LIGHT_ID:
         return {
             "status": "skipped",
@@ -100,8 +151,42 @@ def control_light(action):
             "action": action,
         }
 
+    button = LIGHT_BUTTONS.get(value)
+    if not button:
+        return {
+            "status": "skipped",
+            "message": f"Light button is missing for {value}.",
+            "action": action,
+        }
+
+    result = _post(f"/appliances/{NATURE_REMO_LIGHT_ID}/light", {"button": button})
     return {
-        "status": "skipped",
-        "message": "Light signal IDs are not configured yet.",
+        "status": "ok",
+        "method": "button",
+        "button": button,
         "action": action,
+        "result": result,
     }
+
+
+def _control_light_by_signal(value, action):
+    signal_id = LIGHT_SIGNAL_IDS.get(value)
+    if not signal_id:
+        return {
+            "status": "skipped",
+            "message": f"Light signal ID is missing for {value}.",
+            "action": action,
+        }
+
+    result = _post(f"/signals/{signal_id}/send")
+    return {
+        "status": "ok",
+        "method": "signal",
+        "signal_id": signal_id,
+        "action": action,
+        "result": result,
+    }
+
+
+def _action_value(action):
+    return action.get("value") if isinstance(action, dict) else action
