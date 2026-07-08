@@ -1,33 +1,58 @@
-import os
-import re
-import hmac
 import base64
 import hashlib
+import hmac
+import os
+import re
 from datetime import datetime
+from pathlib import Path
 
 import gspread
 import requests
 from dotenv import load_dotenv
-from flask import Flask, abort, request
+from flask import Flask, abort, jsonify, request
 from gspread.exceptions import WorksheetNotFound
 
 
-load_dotenv()
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+
+load_dotenv(PROJECT_ROOT / ".env")
+load_dotenv(SCRIPT_DIR / ".env", override=True)
 
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
-GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv(
-    "GOOGLE_SERVICE_ACCOUNT_JSON",
-    "service_account.json",
+SPREADSHEET_ID = os.getenv("SPREADSHEET_ID") or os.getenv("GOOGLE_SPREADSHEET_ID")
+GOOGLE_SERVICE_ACCOUNT_JSON = (
+    os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+    or os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
+    or "service_account.json"
 )
 PORT = int(os.getenv("PORT", "5000"))
+
+WAKE = "\u8d77\u5e8a"
+RETURN_HOME = "\u5e30\u5b85"
+SLEEP = "\u5c31\u5bdd"
+ABSENCE = "\u4e0d\u5728"
+
+TIME_PATTERN = r"((?:[01]?\d|2[0-3]):[0-5]\d|24:00)"
 
 app = Flask(__name__)
 
 
+def _resolve_path(path_text):
+    path = Path(path_text)
+    if path.is_absolute():
+        return path
+
+    for base_dir in (SCRIPT_DIR, PROJECT_ROOT):
+        candidate = base_dir / path
+        if candidate.exists():
+            return candidate
+
+    return SCRIPT_DIR / path
+
+
 def verify_signature(body: bytes, signature: str) -> bool:
-    """LINEから届いたWebhookかどうかを確認する。"""
     if not LINE_CHANNEL_SECRET:
         raise RuntimeError("LINE_CHANNEL_SECRET is not set")
 
@@ -43,9 +68,10 @@ def verify_signature(body: bytes, signature: str) -> bool:
 
 def get_spreadsheet():
     if not SPREADSHEET_ID:
-        raise RuntimeError("SPREADSHEET_ID is not set")
+        raise RuntimeError("SPREADSHEET_ID or GOOGLE_SPREADSHEET_ID is not set")
 
-    gc = gspread.service_account(filename=GOOGLE_SERVICE_ACCOUNT_JSON)
+    service_account_path = _resolve_path(GOOGLE_SERVICE_ACCOUNT_JSON)
+    gc = gspread.service_account(filename=str(service_account_path))
     return gc.open_by_key(SPREADSHEET_ID)
 
 
@@ -75,9 +101,9 @@ def save_setting(key: str, value: str):
     rows = ws.get_all_values()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    for i, row in enumerate(rows[1:], start=2):
+    for row_number, row in enumerate(rows[1:], start=2):
         if row and row[0] == key:
-            ws.update(f"B{i}:C{i}", [[value, now]])
+            ws.update(f"B{row_number}:C{row_number}", [[value, now]])
             return
 
     ws.append_row([key, value, now])
@@ -96,72 +122,47 @@ def add_command_queue(user_id: str, command: str, value: str):
 
 
 def parse_command(text: str) -> dict:
-    """
-    LINEから届いた文章を設定コマンドとして解析する。
+    command_map = [
+        (WAKE, "wake_time"),
+        (RETURN_HOME, "return_time"),
+        (SLEEP, "sleep_time"),
+    ]
 
-    例:
-    起床 07:30
-    帰宅 18:30
-    就寝 24:00
-    不在 180
-    """
-    time_pattern = r"((?:[01]?\d|2[0-3]):[0-5]\d|24:00)"
+    for label, key in command_map:
+        match = re.match(rf"^{re.escape(label)}\s+{TIME_PATTERN}$", text)
+        if match:
+            value = match.group(1)
+            return {
+                "ok": True,
+                "key": key,
+                "value": value,
+                "message": f"{label}\u6642\u523b\u3092{value}\u306b\u8a2d\u5b9a\u3057\u307e\u3057\u305f\u3002",
+            }
 
-    wake_match = re.match(rf"^起床\s+{time_pattern}$", text)
-    if wake_match:
-        value = wake_match.group(1)
-        return {
-            "ok": True,
-            "key": "wake_time",
-            "value": value,
-            "message": f"起床時刻を{value}に設定しました。",
-        }
-
-    return_match = re.match(rf"^帰宅\s+{time_pattern}$", text)
-    if return_match:
-        value = return_match.group(1)
-        return {
-            "ok": True,
-            "key": "return_time",
-            "value": value,
-            "message": f"帰宅時刻を{value}に設定しました。",
-        }
-
-    sleep_match = re.match(rf"^就寝\s+{time_pattern}$", text)
-    if sleep_match:
-        value = sleep_match.group(1)
-        return {
-            "ok": True,
-            "key": "sleep_time",
-            "value": value,
-            "message": f"就寝時刻を{value}に設定しました。",
-        }
-
-    absence_match = re.match(r"^不在\s+(\d+)$", text)
+    absence_match = re.match(rf"^{re.escape(ABSENCE)}\s+(\d+)$", text)
     if absence_match:
         value = absence_match.group(1)
         return {
             "ok": True,
             "key": "absence_threshold",
             "value": value,
-            "message": f"不在判定時間を{value}分に設定しました。",
+            "message": f"{ABSENCE}\u5224\u5b9a\u6642\u9593\u3092{value}\u5206\u306b\u8a2d\u5b9a\u3057\u307e\u3057\u305f\u3002",
         }
 
     return {
         "ok": False,
         "message": (
-            "入力形式が正しくありません。\n\n"
-            "例:\n"
-            "起床 07:30\n"
-            "帰宅 18:30\n"
-            "就寝 24:00\n"
-            "不在 180"
+            "\u5165\u529b\u5f62\u5f0f\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093\u3002\n\n"
+            "\u4f8b:\n"
+            f"{WAKE} 07:30\n"
+            f"{RETURN_HOME} 18:30\n"
+            f"{SLEEP} 23:59\n"
+            f"{ABSENCE} 180"
         ),
     }
 
 
 def reply_message(reply_token: str, message: str):
-    """LINEにテキストメッセージを返信する。"""
     if not LINE_CHANNEL_ACCESS_TOKEN:
         raise RuntimeError("LINE_CHANNEL_ACCESS_TOKEN is not set")
 
@@ -201,6 +202,21 @@ def handle_text_message(event):
 @app.get("/health")
 def health():
     return "OK", 200
+
+
+@app.get("/debug/config")
+def debug_config():
+    service_account_path = _resolve_path(GOOGLE_SERVICE_ACCOUNT_JSON)
+    return jsonify(
+        {
+            "line_channel_secret": bool(LINE_CHANNEL_SECRET),
+            "line_channel_access_token": bool(LINE_CHANNEL_ACCESS_TOKEN),
+            "spreadsheet_id": bool(SPREADSHEET_ID),
+            "service_account_file": str(service_account_path),
+            "service_account_exists": service_account_path.exists(),
+            "port": PORT,
+        }
+    )
 
 
 @app.post("/callback")
