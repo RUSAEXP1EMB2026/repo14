@@ -102,7 +102,6 @@ def control_aircon(action):
             "action": action,
         }
 
-    value = _action_value(action)
     data = _aircon_payload(action)
     result = _post(f"/appliances/{NATURE_REMO_AIRCON_ID}/aircon_settings", data)
     return {"status": "ok", "action": action, "payload": data, "result": result}
@@ -110,6 +109,12 @@ def control_aircon(action):
 
 def _aircon_payload(action):
     value = _action_value(action)
+    if isinstance(action, dict) and action.get("button"):
+        return {"button": action.get("button")}
+
+    if value in ("off", "power_off"):
+        return {"button": "power-off"}
+
     if isinstance(action, dict) and action.get("operation_mode") and action.get("temperature"):
         return {
             "operation_mode": action.get("operation_mode"),
