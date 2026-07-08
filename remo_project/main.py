@@ -7,6 +7,9 @@ from modules import nature_remo, spreadsheet, weather
 from services import command_handler
 
 
+_LAST_CONTROL_SIGNATURES = {}
+
+
 def run_once():
     settings = spreadsheet.get_settings()
 
@@ -20,10 +23,15 @@ def run_once():
 
     presence = presence_controller.judge(sensor_data, settings)
 
-    aircon_action = aircon_controller.judge(settings, sensor_data, weather_data)
+    executed_aircon_action = None
+    aircon_action = aircon_controller.judge(settings, sensor_data, weather_data, presence)
     if aircon_action:
-        result = nature_remo.control_aircon(aircon_action)
-        spreadsheet.save_control_log("aircon", aircon_action, result)
+        if not _is_duplicate_control("aircon", aircon_action):
+            result = nature_remo.control_aircon(aircon_action)
+            if result.get("status") == "ok":
+                _remember_control("aircon", aircon_action)
+                executed_aircon_action = aircon_action
+            spreadsheet.save_control_log("aircon", aircon_action, result)
 
     plant_mode_action = plant_mode_controller.judge(settings, sensor_data, weather_data, presence)
     if plant_mode_action:
@@ -46,7 +54,7 @@ def run_once():
             bgm_controller.stop()
 
 
-    audio_action = audio_controller.judge(settings, sensor_data, weather_data, aircon_action)
+    audio_action = audio_controller.judge(settings, sensor_data, weather_data, executed_aircon_action)
     if audio_action:
         result = audio_controller.play(audio_action)
         spreadsheet.save_control_log("audio", audio_action, result)
@@ -59,6 +67,26 @@ def main():
         except Exception as exc:
             spreadsheet.save_control_log("system", "error", str(exc))
         time.sleep(LOOP_INTERVAL_SECONDS)
+
+def _is_duplicate_control(target, action):
+    return _LAST_CONTROL_SIGNATURES.get(target) == _control_signature(action)
+
+
+def _remember_control(target, action):
+    _LAST_CONTROL_SIGNATURES[target] = _control_signature(action)
+
+
+def _control_signature(action):
+    if isinstance(action, dict):
+        return (
+            action.get("value"),
+            action.get("operation_mode"),
+            action.get("temperature"),
+            action.get("air_volume"),
+            action.get("button"),
+        )
+
+    return action
 
 
 if __name__ == "__main__":
