@@ -103,12 +103,20 @@ def control_aircon(action):
         }
 
     value = _action_value(action)
-    data = _aircon_payload(value)
+    data = _aircon_payload(action)
     result = _post(f"/appliances/{NATURE_REMO_AIRCON_ID}/aircon_settings", data)
-    return {"status": "ok", "action": action, "result": result}
+    return {"status": "ok", "action": action, "payload": data, "result": result}
 
 
-def _aircon_payload(value):
+def _aircon_payload(action):
+    value = _action_value(action)
+    if isinstance(action, dict) and action.get("operation_mode") and action.get("temperature"):
+        return {
+            "operation_mode": action.get("operation_mode"),
+            "temperature": str(action.get("temperature")),
+            "air_volume": action.get("air_volume", "auto"),
+        }
+
     if value in ("cooling", "wake_preheat", "return_preheat"):
         return {
             "operation_mode": "cool",
