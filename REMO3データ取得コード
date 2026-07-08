@@ -1,0 +1,41 @@
+// 【設定】取得したアクセストークンをここに入力
+const REMO_ACCESS_TOKEN = 'ekfoY7Kejqzzyj860clxGM4XANALoAgj_1PwS8EPYZo.jIH_h8KLTDO6_G6xB-q8XaWbRBfoYstDMrTTW40TLgc';
+
+function logNatureRemoData() {
+  // 1. Nature Remo APIからデバイス情報を取得
+  const url = 'https://api.nature.global/1/devices';
+  const options = {
+    'method' : 'get',
+    'headers' : {
+      'Authorization': 'Bearer ' + REMO_ACCESS_TOKEN,
+      'accept': 'application/json'
+    }
+  };
+  
+  try {
+    const response = UrlFetchApp.fetch(url, options);
+    const devices = JSON.parse(response.getContentText());
+    
+    // Nature Remo 3（通常は配列の先頭、複数ある場合は適切なものを選択）
+    const remo = devices[0]; 
+    const newestEvents = remo.newest_events;
+    
+    // 各センサー値の取得
+    const temp = newestEvents.te ? newestEvents.te.val : 'N/A'; // 温度
+    const hu = newestEvents.hu ? `=${newestEvents.hu.val}` : 'N/A';    // 湿度（%表記用に調整）
+    const mo = newestEvents.mo ? newestEvents.mo.val : 'N/A';   // 人感センサ
+    
+    // 2. スプレッドシートへの書き込み
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    const now = new Date();
+    
+    // 行の追加 [日時, 温度, 湿度, 人感]
+    sheet.appendRow([now, temp, hu, mo]);
+    
+    // 湿度の列をパーセンテージ表示にする場合の設定（任意）
+    // sheet.getRange(sheet.getLastRow(), 3).setNumberFormat('0%');
+
+  } catch(e) {
+    Logger.log('エラーが発生しました: ' + e.toString());
+  }
+}
