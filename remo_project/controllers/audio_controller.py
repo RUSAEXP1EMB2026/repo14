@@ -12,7 +12,15 @@ _last_wake_announcement_key = None
 
 
 def judge(settings, sensor_data, weather_data, aircon_action, now=None):
-    # 1. 設定された起床時刻のアナウンス（最優先・同一プロセス内で1日1回）
+    wake_action = judge_wake(settings, sensor_data, weather_data, now=now)
+    if wake_action:
+        return wake_action
+
+    return judge_non_wake(weather_data, aircon_action)
+
+
+def judge_wake(settings, sensor_data, weather_data, now=None):
+    # 設定された起床時刻のアナウンス（同一プロセス内で1日1回）
     now = now or datetime.now()
     wake_key = _wake_announcement_key(settings, now)
     if wake_key and wake_key != _last_wake_announcement_key:
@@ -31,7 +39,18 @@ def judge(settings, sensor_data, weather_data, aircon_action, now=None):
             "wake_announcement_key": wake_key,
         }
 
-    # 2. 通常の空調アナウンス
+
+def is_wake_announcement_due(settings, now=None):
+    wake_key = get_wake_event_key(settings, now=now)
+    return bool(wake_key and wake_key != _last_wake_announcement_key)
+
+
+def get_wake_event_key(settings, now=None):
+    return _wake_announcement_key(settings, now or datetime.now())
+
+
+def judge_non_wake(weather_data, aircon_action):
+    # 通常の空調アナウンス
     if aircon_action:
         return {
             "value": "announce_aircon",
@@ -39,7 +58,7 @@ def judge(settings, sensor_data, weather_data, aircon_action, now=None):
             "reason": aircon_action.get("reason", "aircon action was selected"),
         }
 
-    # 3. 雨の日アナウンス（降水確率が50%以上の場合）
+    # 雨の日アナウンス（降水確率が50%以上の場合）
     rain_prob_current = weather_data.get("rain_probability", 0)
     if rain_prob_current >= 50:
         return {

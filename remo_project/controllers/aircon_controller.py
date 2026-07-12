@@ -1,11 +1,19 @@
-from modules.scheduler import is_within_minutes
+from datetime import datetime, timedelta
+
+from modules.scheduler import is_before_time_within_minutes, is_within_minutes
 
 
 RAINY_WEATHER = {"Rain", "Drizzle", "Thunderstorm", "Snow"}
 CLOUDY_WEATHER = {"Clouds", "Mist", "Fog", "Haze"}
+COMFORT_OFF_DELAY_MINUTES = 10
+
+_comfortable_since = None
 
 
-def judge(settings, sensor_data, weather_data, presence=True):
+def judge(settings, sensor_data, weather_data, presence=True, now=None):
+    global _comfortable_since
+
+    now = now or datetime.now()
     temperature = _to_float(sensor_data.get("temperature"))
     if temperature is None:
         return None
@@ -15,13 +23,15 @@ def judge(settings, sensor_data, weather_data, presence=True):
     humidity_max = _to_float(settings.get("comfort_humidity_max"), 65)
 
     if presence is False:
+        _comfortable_since = None
         return _off_action(
             "room is vacant",
             sensor_data,
             weather_data,
         )
 
-    if is_within_minutes(settings.get("wake_time"), 30):
+    if is_before_time_within_minutes(settings.get("wake_time"), 30, now=now):
+        _comfortable_since = None
         return _rhythm_action(
             "wake_preheat",
             "wake time is near",
@@ -33,7 +43,8 @@ def judge(settings, sensor_data, weather_data, presence=True):
             comfort_max,
         )
 
-    if is_within_minutes(settings.get("return_time"), 30):
+    if is_before_time_within_minutes(settings.get("return_time"), 30, now=now):
+        _comfortable_since = None
         return _rhythm_action(
             "return_preheat",
             "return time is near",
@@ -45,11 +56,13 @@ def judge(settings, sensor_data, weather_data, presence=True):
             comfort_max,
         )
 
-    if is_within_minutes(settings.get("sleep_time"), 10):
+    if is_within_minutes(settings.get("sleep_time"), 10, now=now):
+        _comfortable_since = None
         return _sleep_action(sensor_data, weather_data)
 
     humidity = _to_float(sensor_data.get("humidity"))
     if humidity is not None and humidity > humidity_max and temperature >= comfort_max - 1:
+        _comfortable_since = None
         return _cooling_action(
             "humidity_cooling",
             "humidity is high",
@@ -58,6 +71,7 @@ def judge(settings, sensor_data, weather_data, presence=True):
         )
 
     if temperature < comfort_min:
+        _comfortable_since = None
         return _heating_action(
             "heating",
             "room temperature is low",
@@ -66,6 +80,7 @@ def judge(settings, sensor_data, weather_data, presence=True):
         )
 
     if temperature > comfort_max:
+        _comfortable_since = None
         return _cooling_action(
             "cooling",
             "room temperature is high",
@@ -73,8 +88,15 @@ def judge(settings, sensor_data, weather_data, presence=True):
             weather_data,
         )
 
+    if _comfortable_since is None:
+        _comfortable_since = now
+        return None
+
+    if now - _comfortable_since < timedelta(minutes=COMFORT_OFF_DELAY_MINUTES):
+        return None
+
     return _off_action(
-        "room temperature and humidity are comfortable",
+        "room temperature and humidity have been comfortable for 10 minutes",
         sensor_data,
         weather_data,
     )
@@ -108,7 +130,12 @@ def _rhythm_action(
             weather_data,
         )
 
-    return None
+    return _fan_action(
+        value,
+        f"{reason}; room temperature is comfortable",
+        sensor_data,
+        weather_data,
+    )
 
 
 def _sleep_action(sensor_data, weather_data):
@@ -161,6 +188,17 @@ def _heating_action(value, reason, sensor_data, weather_data, sleep=False):
         reason=reason,
         operation_mode="warm",
         temperature=temperature,
+        sensor_data=sensor_data,
+        weather_data=weather_data,
+    )
+
+
+def _fan_action(value, reason, sensor_data, weather_data):
+    return _action(
+        value=value,
+        reason=reason,
+        operation_mode="blow",
+        temperature=None,
         sensor_data=sensor_data,
         weather_data=weather_data,
     )
@@ -227,7 +265,7 @@ def _action(value, reason, operation_mode, temperature, sensor_data, weather_dat
         "value": value,
         "reason": _reason_with_weather(reason, weather, outside_temp, humidity),
         "operation_mode": operation_mode,
-        "temperature": str(temperature),
+        "temperature": str(temperature) if temperature is not None else None,
         "air_volume": "auto",
         "weather": weather,
         "outside_temp": outside_temp,
