@@ -47,6 +47,16 @@ class MainRunOnceTest(unittest.TestCase):
 
         main.run_once()
 
+        aircon_judge.assert_called_once_with(
+            spreadsheet.get_settings.return_value,
+            get_sensor_data.return_value,
+            get_weather.return_value,
+        )
+        light_judge.assert_called_once_with(
+            spreadsheet.get_settings.return_value,
+            get_sensor_data.return_value,
+            get_weather.return_value,
+        )
         audio_play.assert_called_once()
         light_log = [
             call

@@ -30,10 +30,8 @@ def run_once():
 
     wake_light_executed = _handle_wake_actions(settings, sensor_data, weather_data)
 
-    presence = presence_controller.judge(sensor_data, settings)
-
     executed_aircon_action = None
-    aircon_action = aircon_controller.judge(settings, sensor_data, weather_data, presence)
+    aircon_action = aircon_controller.judge(settings, sensor_data, weather_data)
     if aircon_action:
         if not _is_duplicate_control("aircon", aircon_action):
             result = _execute_control("aircon", aircon_action, nature_remo.control_aircon)
@@ -41,10 +39,11 @@ def run_once():
                 _remember_control("aircon", aircon_action)
                 executed_aircon_action = aircon_action
 
-    light_action = light_controller.judge(settings, sensor_data, weather_data, presence)
+    light_action = light_controller.judge(settings, sensor_data, weather_data)
     if light_action and not wake_light_executed:
         _execute_light("light", light_action)
 
+    presence = presence_controller.judge(sensor_data, settings)
     _handle_bgm(settings, sensor_data, weather_data, presence, aircon_action)
 
     audio_action = audio_controller.judge_non_wake(weather_data, executed_aircon_action)

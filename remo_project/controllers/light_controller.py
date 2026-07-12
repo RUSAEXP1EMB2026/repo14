@@ -1,32 +1,16 @@
-from controllers import plant_mode_controller
 from modules.scheduler import is_time_in_daily_range
 
 
-def judge(settings, sensor_data, weather_data, presence, now=None):
+def judge(settings, sensor_data, weather_data, presence=None, now=None):
     if is_sleep_period(settings, now=now):
         return {
             "value": "off",
             "reason": "current time is between sleep time and wake time",
         }
 
-    if presence:
-        return {
-            "value": "full_light",
-            "reason": "presence was detected",
-        }
-
-    plant_action = plant_mode_controller.judge(
-        settings,
-        sensor_data,
-        weather_data,
-        presence,
-    )
-    if plant_action:
-        return plant_action
-
     return {
-        "value": "off",
-        "reason": "presence was not detected",
+        "value": "full_light",
+        "reason": "current time is outside the sleep period",
     }
 
 
