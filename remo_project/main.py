@@ -1,4 +1,5 @@
 import time
+import threading
 
 from config import LOOP_INTERVAL_SECONDS
 from controllers import (
@@ -86,12 +87,26 @@ def _handle_bgm(settings, sensor_data, weather_data, presence, aircon_action):
 
 
 def main():
+    start_line_bot()
+
     while True:
         try:
             run_once()
         except Exception as exc:
             spreadsheet.save_control_log("system", "error", str(exc))
         time.sleep(LOOP_INTERVAL_SECONDS)
+
+
+def start_line_bot():
+    from remo_line_bot.app import run_server
+
+    thread = threading.Thread(
+        target=run_server,
+        name="line-bot-server",
+        daemon=True,
+    )
+    thread.start()
+    return thread
 
 
 def _is_duplicate_control(target, action):

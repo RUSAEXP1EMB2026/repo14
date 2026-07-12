@@ -4,3 +4,4 @@ python-dotenv
 requests
 pygame
 gTTS
+flask
