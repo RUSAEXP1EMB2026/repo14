@@ -246,5 +246,9 @@ def callback():
         return "OK", 200
 
 
+def run_server():
+    app.run(port=PORT, debug=False, use_reloader=False)
+
+
 if __name__ == "__main__":
-    app.run(port=PORT, debug=True)
+    run_server()
