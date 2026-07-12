@@ -1,7 +1,7 @@
 import time
 import threading
 
-from config import LOOP_INTERVAL_SECONDS
+from config import LOOP_INTERVAL_SECONDS, WAKE_CHECK_INTERVAL_SECONDS
 from controllers import (
     aircon_controller,
     audio_controller,
@@ -15,6 +15,7 @@ from services import command_handler
 
 
 _LAST_CONTROL_SIGNATURES = {}
+_last_wake_light_key = None
 
 
 def run_once():
@@ -28,34 +29,78 @@ def run_once():
     weather_data = weather.get_weather()
     spreadsheet.save_weather_log(weather_data)
 
+    _handle_wake_actions(settings, sensor_data, weather_data)
+
     presence = presence_controller.judge(sensor_data, settings)
 
     executed_aircon_action = None
     aircon_action = aircon_controller.judge(settings, sensor_data, weather_data, presence)
     if aircon_action:
         if not _is_duplicate_control("aircon", aircon_action):
-            result = nature_remo.control_aircon(aircon_action)
+            result = _execute_control("aircon", aircon_action, nature_remo.control_aircon)
             if result.get("status") == "ok":
                 _remember_control("aircon", aircon_action)
                 executed_aircon_action = aircon_action
-            spreadsheet.save_control_log("aircon", aircon_action, result)
 
     plant_mode_action = plant_mode_controller.judge(settings, sensor_data, weather_data, presence)
     if plant_mode_action:
-        result = nature_remo.control_light(plant_mode_action)
-        spreadsheet.save_control_log("plant_mode", plant_mode_action, result)
+        _execute_control("plant_mode", plant_mode_action, nature_remo.control_light)
 
     light_action = light_controller.judge(settings, sensor_data, weather_data, presence)
     if light_action and not plant_mode_action:
-        result = nature_remo.control_light(light_action)
-        spreadsheet.save_control_log("light", light_action, result)
+        _execute_control("light", light_action, nature_remo.control_light)
 
     _handle_bgm(settings, sensor_data, weather_data, presence, aircon_action)
 
-    audio_action = audio_controller.judge(settings, sensor_data, weather_data, executed_aircon_action)
+    audio_action = audio_controller.judge_non_wake(weather_data, executed_aircon_action)
     if audio_action:
         result = audio_controller.play(audio_action)
         spreadsheet.save_control_log("audio", audio_action, result)
+
+
+def _handle_wake_announcement(settings, sensor_data, weather_data):
+    action = audio_controller.judge_wake(settings, sensor_data, weather_data)
+    if not action:
+        return
+
+    result = audio_controller.play(action)
+    spreadsheet.save_control_log("audio", action, result)
+
+
+def _handle_wake_actions(settings, sensor_data, weather_data):
+    wake_key = audio_controller.get_wake_event_key(settings)
+    if wake_key:
+        _handle_wake_light(wake_key)
+
+    _handle_wake_announcement(settings, sensor_data, weather_data)
+
+
+def _handle_wake_light(wake_key):
+    global _last_wake_light_key
+
+    if wake_key == _last_wake_light_key:
+        return
+
+    action = {
+        "value": "on",
+        "reason": "configured wake time was reached",
+    }
+    result = _execute_control("wake_light", action, nature_remo.control_light)
+    if result.get("status") == "ok":
+        _last_wake_light_key = wake_key
+
+
+def _execute_control(target, action, control):
+    try:
+        result = control(action)
+    except Exception as exc:
+        result = {
+            "status": "error",
+            "message": str(exc),
+        }
+
+    spreadsheet.save_control_log(target, action, result)
+    return result
 
 
 def _handle_bgm(settings, sensor_data, weather_data, presence, aircon_action):
@@ -88,13 +133,38 @@ def _handle_bgm(settings, sensor_data, weather_data, presence, aircon_action):
 
 def main():
     start_line_bot()
+    next_control_at = 0.0
 
     while True:
+        now = time.monotonic()
         try:
-            run_once()
+            if now >= next_control_at:
+                next_control_at = now + LOOP_INTERVAL_SECONDS
+                run_once()
+            else:
+                check_wake_actions()
         except Exception as exc:
             spreadsheet.save_control_log("system", "error", str(exc))
-        time.sleep(LOOP_INTERVAL_SECONDS)
+
+        seconds_until_control = max(0, next_control_at - time.monotonic())
+        sleep_seconds = min(WAKE_CHECK_INTERVAL_SECONDS, seconds_until_control)
+        if sleep_seconds > 0:
+            time.sleep(sleep_seconds)
+
+
+def check_wake_actions():
+    settings = spreadsheet.get_settings()
+    wake_key = audio_controller.get_wake_event_key(settings)
+    if not wake_key:
+        return
+
+    if wake_key != _last_wake_light_key:
+        _handle_wake_light(wake_key)
+
+    if audio_controller.is_wake_announcement_due(settings):
+        sensor_data = nature_remo.get_sensor_data()
+        weather_data = weather.get_weather()
+        _handle_wake_announcement(settings, sensor_data, weather_data)
 
 
 def start_line_bot():

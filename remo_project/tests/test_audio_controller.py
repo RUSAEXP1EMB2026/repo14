@@ -9,11 +9,10 @@ class AudioControllerTest(unittest.TestCase):
         audio_controller._last_wake_announcement_key = None
 
     def test_builds_wake_announcement_at_configured_time(self):
-        action = audio_controller.judge(
+        action = audio_controller.judge_wake(
             {"wake_time": "07:30"},
             {"temperature": 24.5, "humidity": 51},
             {"description": "晴れ", "rain_probability": 0},
-            None,
             now=datetime(2026, 7, 12, 7, 30),
         )
 
@@ -24,11 +23,10 @@ class AudioControllerTest(unittest.TestCase):
         )
 
     def test_does_not_announce_before_wake_time(self):
-        action = audio_controller.judge(
+        action = audio_controller.judge_wake(
             {"wake_time": "07:30"},
             {"temperature": 24.5, "humidity": 51},
             {"description": "晴れ", "rain_probability": 0},
-            None,
             now=datetime(2026, 7, 12, 7, 29),
         )
 
@@ -39,12 +37,12 @@ class AudioControllerTest(unittest.TestCase):
         settings = {"wake_time": "07:30"}
         sensor_data = {"temperature": 24.5, "humidity": 51}
         weather_data = {"description": "晴れ", "rain_probability": 0}
-        action = audio_controller.judge(settings, sensor_data, weather_data, None, now=now)
+        action = audio_controller.judge_wake(settings, sensor_data, weather_data, now=now)
 
         audio_controller._mark_wake_announcement(action)
 
         self.assertIsNone(
-            audio_controller.judge(settings, sensor_data, weather_data, None, now=now)
+            audio_controller.judge_wake(settings, sensor_data, weather_data, now=now)
         )
 
 

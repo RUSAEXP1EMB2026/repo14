@@ -115,12 +115,14 @@ def _aircon_payload(action):
     if value in ("off", "power_off"):
         return {"button": "power-off"}
 
-    if isinstance(action, dict) and action.get("operation_mode") and action.get("temperature"):
-        return {
+    if isinstance(action, dict) and action.get("operation_mode"):
+        payload = {
             "operation_mode": action.get("operation_mode"),
-            "temperature": str(action.get("temperature")),
             "air_volume": action.get("air_volume", "auto"),
         }
+        if action.get("temperature") is not None:
+            payload["temperature"] = str(action.get("temperature"))
+        return payload
 
     if value in ("cooling", "wake_preheat", "return_preheat"):
         return {
