@@ -1,6 +1,8 @@
 import time
 import os
 from datetime import datetime
+from pathlib import Path
+from uuid import uuid4
 
 from config import ANNOUNCE_FILE, AUDIO_ENABLED, LOOP_INTERVAL_SECONDS
 
@@ -81,20 +83,28 @@ def play(action):
         _mark_wake_announcement(action)
         return result
 
+    announcement_file = None
     try:
         os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
         import pygame
         from gtts import gTTS
 
         pygame.mixer.init()
-        tts = gTTS(text=text, lang="ja")
-        tts.save(ANNOUNCE_FILE)
-
-        # BGMなどが鳴っていれば一度止める
         if pygame.mixer.music.get_busy():
             pygame.mixer.music.stop()
+        if hasattr(pygame.mixer.music, "unload"):
+            pygame.mixer.music.unload()
 
-        pygame.mixer.music.load(ANNOUNCE_FILE)
+        announce_path = Path(ANNOUNCE_FILE)
+        suffix = announce_path.suffix or ".mp3"
+        announcement_file = announce_path.with_name(
+            f"{announce_path.stem}-{uuid4().hex}{suffix}"
+        )
+
+        tts = gTTS(text=text, lang="ja")
+        tts.save(str(announcement_file))
+
+        pygame.mixer.music.load(str(announcement_file))
         pygame.mixer.music.play()
 
         while pygame.mixer.music.get_busy():
@@ -106,6 +116,18 @@ def play(action):
 
     except Exception as exc:
         return {"status": "error", "message": str(exc), "text": text}
+
+    finally:
+        if announcement_file is not None:
+            try:
+                if "pygame" in locals() and hasattr(pygame.mixer.music, "unload"):
+                    pygame.mixer.music.unload()
+            except Exception:
+                pass
+            try:
+                announcement_file.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def _wake_announcement_key(settings, now):

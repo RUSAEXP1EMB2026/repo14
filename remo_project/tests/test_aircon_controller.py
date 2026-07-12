@@ -103,6 +103,22 @@ class AirconControllerTest(unittest.TestCase):
         self.assertEqual(action["value"], "cooling")
         self.assertIsNone(aircon_controller._comfortable_since)
 
+    def test_controls_temperature_even_when_presence_is_false(self):
+        action = aircon_controller.judge(
+            {
+                "comfort_temp_min": 20,
+                "comfort_temp_max": 24,
+                "comfort_humidity_max": 60,
+            },
+            {"temperature": 25.9, "humidity": 75},
+            {"weather": "Clouds", "outside_temp": 29.98},
+            presence=False,
+            now=datetime(2026, 7, 12, 21, 7),
+        )
+
+        self.assertEqual(action["value"], "humidity_cooling")
+        self.assertEqual(action["operation_mode"], "cool")
+
     def test_fan_payload_omits_temperature(self):
         payload = nature_remo._aircon_payload(
             {

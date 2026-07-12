@@ -22,14 +22,6 @@ def judge(settings, sensor_data, weather_data, presence=True, now=None):
     comfort_max = _to_float(settings.get("comfort_temp_max"), 26)
     humidity_max = _to_float(settings.get("comfort_humidity_max"), 65)
 
-    if presence is False:
-        _comfortable_since = None
-        return _off_action(
-            "room is vacant",
-            sensor_data,
-            weather_data,
-        )
-
     if is_before_time_within_minutes(settings.get("wake_time"), 30, now=now):
         _comfortable_since = None
         return _rhythm_action(

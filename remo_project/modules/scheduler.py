@@ -16,6 +16,24 @@ def is_before_time_within_minutes(time_text, minutes, now=None):
     )
 
 
+def is_time_in_daily_range(start_time_text, end_time_text, now=None):
+    now = now or datetime.now()
+    start = _parse_time(start_time_text)
+    end = _parse_time(end_time_text)
+    if start is None or end is None:
+        return False
+
+    current_minutes = now.hour * 60 + now.minute
+    start_minutes = start[0] * 60 + start[1]
+    end_minutes = end[0] * 60 + end[1]
+
+    if start_minutes == end_minutes:
+        return False
+    if start_minutes < end_minutes:
+        return start_minutes <= current_minutes < end_minutes
+    return current_minutes >= start_minutes or current_minutes < end_minutes
+
+
 def _target_candidates(time_text, now):
     parsed = _parse_time(time_text)
     if parsed is None:
