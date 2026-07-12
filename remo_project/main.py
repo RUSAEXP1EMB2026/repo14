@@ -7,7 +7,6 @@ from controllers import (
     audio_controller,
     bgm_controller,
     light_controller,
-    plant_mode_controller,
     presence_controller,
 )
 from modules import nature_remo, spreadsheet, weather
@@ -29,7 +28,7 @@ def run_once():
     weather_data = weather.get_weather()
     spreadsheet.save_weather_log(weather_data)
 
-    _handle_wake_actions(settings, sensor_data, weather_data)
+    wake_light_executed = _handle_wake_actions(settings, sensor_data, weather_data)
 
     presence = presence_controller.judge(sensor_data, settings)
 
@@ -42,13 +41,9 @@ def run_once():
                 _remember_control("aircon", aircon_action)
                 executed_aircon_action = aircon_action
 
-    plant_mode_action = plant_mode_controller.judge(settings, sensor_data, weather_data, presence)
-    if plant_mode_action:
-        _execute_control("plant_mode", plant_mode_action, nature_remo.control_light)
-
     light_action = light_controller.judge(settings, sensor_data, weather_data, presence)
-    if light_action and not plant_mode_action:
-        _execute_control("light", light_action, nature_remo.control_light)
+    if light_action and not wake_light_executed:
+        _execute_light("light", light_action)
 
     _handle_bgm(settings, sensor_data, weather_data, presence, aircon_action)
 
@@ -69,25 +64,40 @@ def _handle_wake_announcement(settings, sensor_data, weather_data):
 
 def _handle_wake_actions(settings, sensor_data, weather_data):
     wake_key = audio_controller.get_wake_event_key(settings)
+    light_executed = False
     if wake_key:
-        _handle_wake_light(wake_key)
+        light_executed = _handle_wake_light(wake_key)
 
     _handle_wake_announcement(settings, sensor_data, weather_data)
+    return light_executed
 
 
 def _handle_wake_light(wake_key):
     global _last_wake_light_key
 
     if wake_key == _last_wake_light_key:
-        return
+        return False
 
     action = {
-        "value": "on",
+        "value": "full_light",
         "reason": "configured wake time was reached",
     }
-    result = _execute_control("wake_light", action, nature_remo.control_light)
+    result = _execute_light("wake_light", action, force=True)
     if result.get("status") == "ok":
         _last_wake_light_key = wake_key
+        return True
+
+    return False
+
+
+def _execute_light(target, action, force=False):
+    if not force and _is_duplicate_control("light", action):
+        return {"status": "already_applied"}
+
+    result = _execute_control(target, action, nature_remo.control_light)
+    if result.get("status") == "ok":
+        _remember_control("light", action)
+    return result
 
 
 def _execute_control(target, action, control):
@@ -154,6 +164,16 @@ def main():
 
 def check_wake_actions():
     settings = spreadsheet.get_settings()
+
+    if light_controller.is_sleep_period(settings):
+        _execute_light(
+            "sleep_light",
+            {
+                "value": "off",
+                "reason": "current time is between sleep time and wake time",
+            },
+        )
+
     wake_key = audio_controller.get_wake_event_key(settings)
     if not wake_key:
         return

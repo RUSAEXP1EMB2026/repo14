@@ -1,13 +1,38 @@
-def judge(settings, sensor_data, weather_data, presence):
-    weather = weather_data.get("weather")
+from controllers import plant_mode_controller
+from modules.scheduler import is_time_in_daily_range
 
-    if not presence:
-        return {"value": "plant_mode", "reason": "room is vacant"}
 
-    if weather in ("Rain", "Clouds"):
-        return {"value": "warm_light", "reason": "weather is cloudy or rainy"}
+def judge(settings, sensor_data, weather_data, presence, now=None):
+    if is_sleep_period(settings, now=now):
+        return {
+            "value": "off",
+            "reason": "current time is between sleep time and wake time",
+        }
 
-    if weather == "Clear":
-        return {"value": "daylight", "reason": "weather is clear"}
+    if presence:
+        return {
+            "value": "full_light",
+            "reason": "presence was detected",
+        }
 
-    return None
+    plant_action = plant_mode_controller.judge(
+        settings,
+        sensor_data,
+        weather_data,
+        presence,
+    )
+    if plant_action:
+        return plant_action
+
+    return {
+        "value": "off",
+        "reason": "presence was not detected",
+    }
+
+
+def is_sleep_period(settings, now=None):
+    return is_time_in_daily_range(
+        settings.get("sleep_time"),
+        settings.get("wake_time"),
+        now=now,
+    )

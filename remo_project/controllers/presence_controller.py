@@ -13,9 +13,9 @@ def judge(sensor_data, settings):
     if motion_time is None:
         return True
 
-    absence_threshold = _to_float(settings.get("absence_threshold"), 180)
+    presence_timeout = _to_float(settings.get("presence_timeout"), 5)
     elapsed_minutes = (datetime.now(timezone.utc) - motion_time).total_seconds() / 60
-    return elapsed_minutes <= absence_threshold
+    return elapsed_minutes <= presence_timeout
 
 
 def _parse_datetime(value):

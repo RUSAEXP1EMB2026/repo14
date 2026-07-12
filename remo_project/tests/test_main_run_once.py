@@ -7,6 +7,7 @@ import main
 class MainRunOnceTest(unittest.TestCase):
     def setUp(self):
         main._last_wake_light_key = None
+        main._LAST_CONTROL_SIGNATURES.clear()
 
     @patch("main.audio_controller.play", return_value={"status": "ok"})
     @patch("main.audio_controller.judge_non_wake", return_value=None)
@@ -21,7 +22,6 @@ class MainRunOnceTest(unittest.TestCase):
     @patch("main.bgm_controller.stop", return_value={"status": "idle"})
     @patch("main.light_controller.judge", return_value={"value": "daylight"})
     @patch("main.nature_remo.control_light", side_effect=RuntimeError("Nature Remo light error"))
-    @patch("main.plant_mode_controller.judge", return_value=None)
     @patch("main.aircon_controller.judge", return_value=None)
     @patch("main.presence_controller.judge", return_value=True)
     @patch("main.weather.get_weather", return_value={"description": "晴れ"})
@@ -36,7 +36,6 @@ class MainRunOnceTest(unittest.TestCase):
         get_weather,
         presence_judge,
         aircon_judge,
-        plant_mode_judge,
         control_light,
         light_judge,
         bgm_stop,
@@ -98,7 +97,7 @@ class MainRunOnceTest(unittest.TestCase):
         execute_control.assert_called_once()
         target, action, control = execute_control.call_args.args
         self.assertEqual(target, "wake_light")
-        self.assertEqual(action["value"], "on")
+        self.assertEqual(action["value"], "full_light")
         self.assertIs(control, main.nature_remo.control_light)
 
 
